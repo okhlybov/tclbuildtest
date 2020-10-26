@@ -1,0 +1,10 @@
+lappend auto_path [file join [file dirname [file normalize [info script]]] .. src]
+
+package require tclbuildtest
+namespace import tclbuildtest::*
+
+test {c c++ static} auto {
+    packages mumps-dmo
+    puts $cflags
+    puts $ldflags
+}
