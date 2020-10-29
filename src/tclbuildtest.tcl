@@ -73,22 +73,51 @@ namespace eval ::tclbuildtest {
 		}
 	}
 	
-	namespace export test packages compile run constraint?
+	namespace export sandbox test packages compile run constraint?
 	
 	# Standard variables which are always defined
 	variable variables {
 		pc cc cxx fc mpicc mpicxx mpifc
 		compile-count
-		cflags cflags_static cflags_mpi cflags_openmp ldflags ldflags_static ldflags_mpi ldflags_openmp
+		cflags cflags_static cflags_mpi cflags_openmp
+		ldflags ldflags_static ldflags_mpi ldflags_openmp
 	}
 
 	foreach v $variables {namespace upvar environment $v $v}
 
+	proc mktempdir {} {
+		try {
+			package require fileutil
+			return [::fileutil::maketempdir -prefix test]
+		} on error {} {
+			return [exec mktemp -d --tmpdir testXXX]
+		}
+	}
+
+	proc rmdir {dir} {
+		try {
+			file delete -force $dir
+		} on error {} {
+			exec -ignorestderr nohup sh -c "while \[ -d '$dir' \]; do rm -rf '$dir'; sleep 10; done" > /dev/null 2>@1 &
+		}
+	}
+
+	proc sandbox {script} {
+		variable stagedir [mktempdir]
+		try {
+			file copy -force {*}[glob -directory [file dirname [file normalize [info script]]] -nocomplain *] $stagedir
+			::tcltest::workingDirectory $stagedir
+			eval $script
+		} finally {
+			rmdir $stagedir
+		}
+	}
+
 	proc packages {args} {
 		foreach v {pc cflags ldflags} {variable $v}
 		if {[constraint? static]} {set pcf --static} else {set pcf {}}
-		lappend cflags [lindex [dict get [run $pc {*}$args --cflags $pcf] stdout] 0]
-		lappend ldflags [lindex [dict get [run $pc {*}$args --libs $pcf] stdout] 0]
+		lappend cflags [lindex [dict get [system $pc {*}$args --cflags $pcf] stdout] 0]
+		lappend ldflags [lindex [dict get [system $pc {*}$args --libs $pcf] stdout] 0]
 		return
 	}
 
@@ -120,7 +149,7 @@ namespace eval ::tclbuildtest {
 
 	proc compiler {args} {
 		foreach v {cc cxx fc mpicc mpicxx mpifc} {variable $v}
-		return [subst $[deduce-compiler {*}$args]]
+		return [subst $[deduce-compiler {*}[lsqueeze $args]]]
 	}
 
 	proc compile {args} {
@@ -142,11 +171,15 @@ namespace eval ::tclbuildtest {
 			set cf [concat $cf $cflags_openmp]
 			set lf [concat $lf $ldflags_openmp]
 		}
-		run {*}[concat [compiler {*}$args] -o [set prog "test[incr compile-count]"] $cf $args $lf]
+		system {*}[concat [compiler {*}$args] -o [set prog "test[incr compile-count]"] $cf $args $lf]
 		return $prog
 	}
 
 	proc run {args} {
+
+	}
+	
+	proc system {args} {
 		set args [lsqueeze $args]
 		set command [join $args]
 		try {
@@ -168,6 +201,14 @@ namespace eval ::tclbuildtest {
 		return -code $code [dict create command $command status $status stdout $stdout stderr $stderr options $options]
 	}
 
+	# Standard predefined constraints
+	foreach ct {
+		c c++ fortran
+		single double complex
+		static
+		debug
+	} {::tcltest::testConstraint $ct 1}
+
 	proc constraint? {ct} {
 		variable constraints
 		expr {[lsearch $constraints $ct] >= 0}
@@ -177,7 +218,7 @@ namespace eval ::tclbuildtest {
 		variable variables; foreach v $variables {variable $v}
 		variable constraints [lsqueeze $cts]
 		namespace eval environment $env
-		eval $script
+		::tcltest::test -constraints $constraints -body $script
 	}
 
 	proc read-file {file} {

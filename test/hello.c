@@ -1,6 +1,7 @@
-#include <stdout.h>
+#include <stdio.h>
 
 int main(int argc, char** argv) {
-    printf("Hello, tclbuildtest!\n");
+    fprintf(stdout, "stdout\n");
+    fprintf(stderr, "stderr\n");
     return 0;
 }
