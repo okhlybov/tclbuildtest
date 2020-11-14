@@ -3,7 +3,7 @@ lappend auto_path [file join [file dirname [file normalize [info script]]] .. sr
 package require tclbuildtest
 
 ::tclbuildtest::sandbox {
-    test {c} auto {
-        run [compile hello.c]
+    test {c} {
+        compile hello.c
     }
 }
