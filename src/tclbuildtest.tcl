@@ -4,19 +4,45 @@
 # https://github.com/okhlybov/tclbuildtest
 #
 
-package require Tcl 8.6
-
-package require tcltest
-
 package provide tclbuildtest 0.1
+
+package require Tcl 8.6
+package require tcltest 2.5
 
 namespace eval ::tclbuildtest {
 	
-	namespace export sandbox test packages compile run constraint?
+	variable compile-count 0
+	variable system-count 0
+
+	# Standard predefined constraints
+	foreach ct {
+		c c++ fortran
+		single double
+		real complex
+		openmp thread hybrid mpi
+		static
+		debug
+	} {::tcltest::testConstraint $ct 1}
 
 	# Return a value of the environment variable or {} if no such variable is set
 	proc env {var} {
 		try {return [set ::env($var)]} on error {} {return {}}
+	}
+
+	# MpiExec detection
+	proc mpiexec {} {
+		variable pc
+		try {set mpiexec} on error {} {
+			set mpiexec {}
+			foreach x [collect [env MPIEXEC] mpiexec mpirun] {
+				if {![catch {exec {*}$x}]} {
+					set mpiexec $x
+					break
+				}
+			}
+		}
+		if {$mpiexec == {}} {error {failed to detect MpiExec or equivalent}}
+		return $mpiexec
 	}
 
 	# PkgConfig detection
@@ -214,11 +240,11 @@ namespace eval ::tclbuildtest {
 	}
 	
 	# Common constraints-specific compilation flags
-	proc common-cflags {args} {
-		if {[constraint? openmp]} {lappend args -fopenmp}
-		if {[constraint? thread]} {lappend args -pthreads}
-		if {![constraint? debug]} {lappend args -O2}
-		return $args
+	proc common-cflags {opts} {
+		if {[constraint? openmp]} {lappend opts -fopenmp}
+		if {[constraint? thread]} {lappend opts -pthreads}
+		if {![constraint? debug]} {lappend opts -O2}
+		return $opts
 	}
 
 	proc cflags {args} {
@@ -266,6 +292,7 @@ namespace eval ::tclbuildtest {
 		lappend libs {*}$args
 	}
 
+	# Perform source code compilation into executable
 	proc compile {args} {
 		variable compile-count
 		set args [lsqueeze $args]
@@ -281,7 +308,10 @@ namespace eval ::tclbuildtest {
 		return $prog
 	}
 
+	# Perform running of the specified executable with supplied command line arguments
 	proc run {args} {
+		if {[constraint? mpi]} {set runner [mpiexec]} else {set runner {}}
+		system {*}[collect $runner {*}$args]
 	}
 
 	proc system {args} {
@@ -291,6 +321,7 @@ namespace eval ::tclbuildtest {
 		set stderr stderr${system-count}
 		set args [lsqueeze $args]
 		set command [join $args]
+		if {[::tcltest::debug] > 0} {::puts [::tcltest::outputChannel] "> $command"}
 		try {
 			exec -ignorestderr -- {*}$args > $stdout 2> $stderr
 			set options {}
@@ -307,18 +338,13 @@ namespace eval ::tclbuildtest {
 				file delete -force $stdout $stderr
 			}
 		}
+		if {[::tcltest::debug] > 0} {
+			foreach x $out {::puts [::tcltest::outputChannel] $x}
+			if {[llength $out] > 0 && [llength $err] > 0} {::puts [::tcltest::outputChannel] ----}
+			foreach x $err {::puts [::tcltest::outputChannel] $x}
+		}
 		return -code $code [dict create command $command status $status stdout $out stderr $err options $options]
 	}
-
-	# Standard predefined constraints
-	foreach ct {
-		c c++ fortran
-		single double
-		real complex
-		openmp thread hybrid mpi
-		static
-		debug
-	} {::tcltest::testConstraint $ct 1}
 
 	# Construct a scalar type ID from the constraints
 	proc x {} {
@@ -346,9 +372,55 @@ namespace eval ::tclbuildtest {
 		return o
 	}
 
-	# Construct a 3-letter build code from the constraints
+	# Construct a 3-letter XYZ build code from the constraints
 	proc xyz {} {
 		 return [x][y][z]
+	}
+
+	# Construct the test name based on the constraints set
+	proc name {} {
+		join [list [file rootname [file tail [info script]]] {*}[constraints]] -
+	}
+
+	# Construct human-readable description of the test according to the contraints set
+	proc description {} {
+		set t {}
+		variable constraints
+		switch [intersection {c c++ fortran} $constraints] {
+			c {lappend t C}
+			c++ {lappend t C++}
+			fortran {lappend t FORTRAN}
+		}
+		try {
+			switch [y] {
+				s {lappend t sequential}
+				m {lappend t MPI}
+				t {lappend t multithreaded}
+				h {lappend t heterogeneous}
+			}
+		} on error {} {}
+		try {
+			switch [x] {
+				s {lappend t "single precision"}
+				d {lappend t "double precision"}
+				c {lappend t "single precision complex"}
+				z {lappend t "double precision complex"}
+			}
+		} on error {} {}
+		switch [z] {
+			o {lappend t optimized}
+			g {lappend t debugging}
+		}
+		join $t
+	}
+
+	# Set constraints
+	proc constraints {args} {
+		variable constraints
+		try {set constraints} on error {} {
+			set constraints {}
+		}
+		lappend constraints {*}[lsqueeze $args]
 	}
 
 	proc constraint-any? {args} {
@@ -373,13 +445,19 @@ namespace eval ::tclbuildtest {
 	# Test failure is triggered by throwing an exception
 	::tcltest::customMatch exception {return 1; #}
 
+	# Reset environment in preparation for a new test
+	proc reset-environment {} {
+		foreach v {constraints cppflags cflags cxxflags fflags ldflags libs} {variable $v; catch {unset $v}}
+	}
+
 	#
 	proc test {cts script} {
-		variable compile-count 0
-		variable system-count 0
-		variable constraints [lsqueeze $cts]
-		foreach v {cppflags cflags cxxflags fflags ldflags libs} {variable $v; catch {unset $v}}
-		::tcltest::test -constraints $constraints -body $script -match exception
+		reset-environment
+		set cts [constraints {*}$cts]
+		::tcltest::test \
+			[name] \
+			"[description] build" \
+			-constraints $cts -body $script -match exception
 	}
 
 	proc read-file {file} {
@@ -403,5 +481,14 @@ namespace eval ::tclbuildtest {
 	# Return a new list from the specified arguments squashing {} values
 	proc collect {args} {
 		lsqueeze $args
+	}
+
+	# Return intersection of two lists
+	proc intersection {a b} {
+		set x {}
+		foreach i $a {
+			if {[lsearch -exact $b $i] != -1} {lappend x $i}
+		}
+		return $x
 	}
 }

@@ -3,7 +3,10 @@ lappend auto_path [file join [file dirname [file normalize [info script]]] .. sr
 package require tclbuildtest
 
 ::tclbuildtest::sandbox {
-    test {c static} {
-        run [compile hello.c]
+    test {mpi c} {
+        run [compile mpi.c]
+    }
+    test {mpi fortran} {
+        run [compile mpi.f90]
     }
 }
