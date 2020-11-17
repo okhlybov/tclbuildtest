@@ -11,8 +11,8 @@ package require tcltest 2.5
 
 namespace eval ::tclbuildtest {
 	
-	variable compile-count 0
 	variable system-count 0
+	variable compile-count 0
 
 	# Standard predefined constraints
 	foreach ct {
@@ -187,8 +187,8 @@ namespace eval ::tclbuildtest {
 
 	proc packages {args} {
 		if {[constraint? static]} {set flags --static} else {set flags {}}
-		cflags  {*}[lindex [dict get [system [pkg-config] {*}$args --cflags {*}$flags] stdout] 0]
-		ldflags {*}[lindex [dict get [system [pkg-config] {*}$args --libs   {*}$flags] stdout] 0]
+		compile-flags {*}[lindex [dict get [system [pkg-config] {*}$args --cflags {*}$flags] stdout] 0]
+		ldflags {*}[lindex [dict get [system [pkg-config] {*}$args --libs {*}$flags] stdout] 0]
 		return
 	}
 
@@ -222,6 +222,14 @@ namespace eval ::tclbuildtest {
 		return [[deduce-compiler-proc [lsqueeze $opts]]]
 	}
 
+	proc deduce-lang-compile-flags {opts} {
+		switch [deduce-language $opts] {
+			c {return cflags}
+			c++ {return cxxflags}
+			fortran {return fflags}
+		}
+	}
+	
 	proc cppflags {args} {
 		variable cppflags
 		try {set cppflags} on error {} {
@@ -231,26 +239,21 @@ namespace eval ::tclbuildtest {
 		lappend cppflags {*}$args
 	}
 
-	proc deduce-compile-flags {opts} {
-		switch [deduce-language $opts] {
-			c {return cflags}
-			c++ {return cxxflags}
-			fortran {return fflags}
+	proc compile-flags {args} {
+		variable compile-flags
+		try {set compile-flags} on error {} {
+			set compile-flags {}
+			if {[constraint? openmp]} {lappend compile-flags -fopenmp}
+			if {[constraint? thread]} {lappend compile-flags -pthreads}
+			if {![constraint? debug]} {lappend compile-flags -O2}
 		}
-	}
-	
-	# Common constraints-specific compilation flags
-	proc common-cflags {opts} {
-		if {[constraint? openmp]} {lappend opts -fopenmp}
-		if {[constraint? thread]} {lappend opts -pthreads}
-		if {![constraint? debug]} {lappend opts -O2}
-		return $opts
+		lappend compile-flags {*}$args
 	}
 
 	proc cflags {args} {
 		variable cflags
 		try {set cflags} on error {} {
-			set cflags [lsqueeze [common-cflags [env CFLAGS]]]
+			set cflags [lsqueeze [env CFLAGS]]
 		}
 		lappend cflags {*}$args
 	}
@@ -258,7 +261,7 @@ namespace eval ::tclbuildtest {
 	proc cxxflags {args} {
 		variable cxxflags
 		try {set cxxflags} on error {} {
-			set cxxflags [lsqueeze [common-cflags [env CXXFLAGS]]]
+			set cxxflags [lsqueeze [env CXXFLAGS]]
 		}
 		lappend cxxflags {*}$args
 	}
@@ -266,7 +269,7 @@ namespace eval ::tclbuildtest {
 	proc fflags {args} {
 		variable fflags
 		try {set fflags} on error {} {
-			set fflags [lsqueeze [common-cflags [env FFLAGS]]]
+			set fflags [lsqueeze [env FFLAGS]]
 		}
 		lappend fflags {*}$args
 	}
@@ -300,7 +303,8 @@ namespace eval ::tclbuildtest {
 			[compiler $args] \
 			-o [set prog test[incr compile-count]] \
 			[cppflags] \
-			[[deduce-compile-flags $args]] \
+			[compile-flags] \
+			[[deduce-lang-compile-flags $args]] \
 			$args \
 			[ldflags] \
 			[libs] \
