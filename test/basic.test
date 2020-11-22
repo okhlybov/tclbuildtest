@@ -1,9 +1,11 @@
-lappend auto_path [file join [file dirname [file normalize [info script]]] .. src]
+lappend auto_path [file join [file dirname [file normalize [info script]]] ..]
 
 package require tclbuildtest
 
 ::tclbuildtest::sandbox {
-    test {c static} {
-        run [compile hello.c]
+    foreach b {{} static} {
+        test [collect c $b] {
+            run [compile hello.c]
+        }
     }
 }

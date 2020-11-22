@@ -7,7 +7,191 @@
 package provide tclbuildtest 0.1
 
 package require Tcl 8.6
-package require tcltest 2.5
+package require tcltest 2.5.1
+
+# https://github.com/tcl2020/named-parameters
+
+namespace eval ::np {
+	#
+	# proc_args_to_dict - given a proc name and declared
+	#   proc arguments (variable names with optional
+	#   default values and a -- and possible some more
+	#   stuff, create and return a dict containing that
+	#   info in a way that's convenient and quicker
+	#   for us at runtime:
+	#   * we store a list of positional parameters
+	#   * we store a list of named parameters
+	#   * we store a list of var-value defaults
+	#   * we get a tricked-out error message in errmsg
+	#
+	::proc proc_args_to_dict {name procArgs} {
+		set seenDashes 0
+		dict set d defaults [list]
+		dict set d positional [list]
+		dict set d named [list]
+		set errmsg "wrong # args: should be \"$name "
+
+		foreach arg $procArgs {
+			if {$arg eq "--"} {
+				set seenDashes 1
+				append errmsg "?--? "
+				continue
+			}
+
+			set var [lindex $arg 0]
+			dict lappend d [expr {$seenDashes ? "positional" : "named"}] $var
+
+			if {[llength $arg] == 2} {
+				dict lappend d defaults $var [lindex $arg 1]
+				if {$seenDashes} {
+					append errmsg "?$var? "
+				} else {
+					append errmsg "?-$var val? "
+				}
+			} elseif {$var eq "args"} {
+				dict lappend d defaults $var [list]
+				append errmsg "?arg ...? "
+			} else {
+				if {$seenDashes} {
+					append errmsg "$var "
+				} else {
+					append errmsg "-$var val "
+				}
+			}
+		}
+		dict set d errmsg "[string range $errmsg 0 end-1]\""
+		return $d
+	}
+
+	#
+	# np_handler - look at an argument dict created by proc_args_to_dict
+	#   and look at the real arguments to a function (args), and sort
+	#   out the named and positional parameters to behave in the
+	#   expected way.
+	#
+	::proc np_handler {argd realArgs} {
+		set named [dict get $argd named]
+		set positional [dict get $argd positional]
+
+		# process named parameters
+		while {[llength $realArgs] > 0} {
+			set arg [lindex $realArgs 0]
+
+			# if arg is --, flip to positional
+			if {$arg eq "--"} {
+				set realArgs [lrange $realArgs 1 end]
+				break
+			}
+
+			# if "var" doesn't start with a dash, flip to positional
+			if {[string index $arg 0] ne "-"} {
+				#puts "possible var '$arg' doesn't start with a dash, flip to positional"
+				break
+			}
+
+			# if "var" isn't known to us as a named parameter, flip to positional
+			set var [string range $arg 1 end]
+			if {[lsearch $named $var] < 0} {
+				#puts "'var' '$arg' not recognized, flip to positional"
+				break
+			}
+
+			# if there isn't at least one more element in the arg list,
+			# we are missing a value for one of our named parameters
+			if {[llength $realArgs] == 0} {
+				#puts "realArgs is empty but i expect something for $var"
+				error [dict get $argd errmsg] "" [list TCL WRONGARGS]
+			}
+
+			# we're good, set the named parameter into the variable sets
+			#puts [list set vsets($var) [lindex $realArgs 1]]
+
+			# but don't allow the same variable to be set twice
+			if {[info exists vsets($var)]} {
+				error [dict get $argd errmsg] "" [list TCL WRONGARGS]
+			}
+
+			set vsets($var) [lindex $realArgs 1]
+			set realArgs [lrange $realArgs 2 end]
+		}
+
+		# fill in defaults for all the vars with defaults that
+		# didn't get set to a value
+		foreach "var value" [dict get $argd defaults] {
+			if {![info exists vsets($var)]} {
+				set vsets($var) $value
+			}
+		}
+
+		foreach var $positional {
+			if {$var eq "args"} {
+				set vsets($var) $realArgs
+				set realArgs [list]
+				break
+			}
+
+			if {[llength $realArgs] > 0} {
+				set vsets($var) [lindex $realArgs 0]
+				set realArgs [lrange $realArgs 1 end]
+			}
+
+			# no arguments left.  if this var doesn't
+			# have a default value, it's a wrong args error
+			if {![info exists vsets($var)]} {
+				error [dict get $argd errmsg] "" [list TCL WRONGARGS]
+			}
+		}
+
+		# make sure all the named parameters have been set, either
+		# by defaults or explicitly, any not set is an error
+		foreach var $named {
+			if {![info exists vsets($var)]} {
+				#puts "required named parameter '-$var' is not set"
+				error [dict get $argd errmsg] "" [list TCL WRONGARGS]
+			}
+		}
+
+		# are there too many arguments?
+		if {[llength $realArgs] > 0} {
+			#puts "leftover arguments (too many) '$realArgs'"
+			error [dict get $argd errmsg] "" [list TCL WRONGARGS]
+		}
+
+		# now iterate through the var-value pairs and set them into
+		# the caller's frame
+		foreach "var value" [array get vsets] {
+			#puts "set '$var' '$value'"
+			upvar $var myvar
+			set myvar $value
+		}
+		return
+	}
+
+	#
+	# np::proc - same as proc except if -- is in the argv
+	#   then it will generate a proc that has extra code
+	#   at the beginning to wrangle the named parameters
+	#
+	proc proc {name argv body} {
+		# handle the case where there are no named parameters
+		if {[lsearch $argv --] < 0} {
+			uplevel [list ::proc $name $argv $body]
+			return
+		}
+
+		if {[lsearch $argv --] == 0} {
+			return -code error "-- cannot be the first argument for named parameters. Use positional parameters."
+		}
+
+		set d [proc_args_to_dict $name $argv]
+		set newbody "::proc $name args {\n"
+		append newbody "    ::np::np_handler [list $d] \$args\n"
+		append newbody $body
+		append newbody "\n}"
+		#puts $newbody
+		uplevel $newbody
+	}
+}
 
 namespace eval ::tclbuildtest {
 	
@@ -31,7 +215,7 @@ namespace eval ::tclbuildtest {
 
 	# MpiExec detection
 	proc mpiexec {} {
-		variable pc
+		variable mpiexec
 		try {set mpiexec} on error {} {
 			set mpiexec {}
 			foreach x [collect [env MPIEXEC] mpiexec mpirun] {
@@ -130,7 +314,7 @@ namespace eval ::tclbuildtest {
 		variable mpicxx
 		try {set mpicxx} on error {} {
 			set mpicxx {}
-			foreach x [collect [env MPICXX] mpicxx mpic++ mpiCC] {
+			foreach x [collect [env MPICXX] mpicxx mpic++] {
 				if {![catch {exec {*}$x --version}]} {
 					set mpicxx $x
 					break
@@ -176,8 +360,9 @@ namespace eval ::tclbuildtest {
 	proc sandbox {script} {
 		variable stagedir [mktempdir]
 		try {
-			file copy -force {*}[glob -directory [file dirname [file normalize [info script]]] -nocomplain *] $stagedir
+			::tcltest::configure {*}$::argv
 			::tcltest::workingDirectory $stagedir
+			file copy -force {*}[glob -directory [file dirname [file normalize [info script]]] -nocomplain *] $stagedir
 			eval $script
 		} finally {
 			::tcltest::cleanupTests
@@ -325,7 +510,8 @@ namespace eval ::tclbuildtest {
 		set stderr stderr${system-count}
 		set args [lsqueeze $args]
 		set command [join $args]
-		if {[::tcltest::debug] > 0} {::puts [::tcltest::outputChannel] "> $command"}
+		if {[lsearch [::tcltest::verbose] exec] < 0} {set verbose 0} else {set verbose 1}
+		if {$verbose} {::puts [::tcltest::outputChannel] "> $command"}
 		try {
 			exec -ignorestderr -- {*}$args > $stdout 2> $stderr
 			set options {}
@@ -342,7 +528,7 @@ namespace eval ::tclbuildtest {
 				file delete -force $stdout $stderr
 			}
 		}
-		if {[::tcltest::debug] > 0} {
+		if {$verbose} {
 			foreach x $out {::puts [::tcltest::outputChannel] $x}
 			if {[llength $out] > 0 && [llength $err] > 0} {::puts [::tcltest::outputChannel] ----}
 			foreach x $err {::puts [::tcltest::outputChannel] $x}
@@ -390,9 +576,9 @@ namespace eval ::tclbuildtest {
 	proc description {} {
 		set t {}
 		variable constraints
-		switch [intersection {c c++ fortran} $constraints] {
+		switch [intersection {c cxx fortran} $constraints] {
 			c {lappend t C}
-			c++ {lappend t C++}
+			cxx {lappend t C++}
 			fortran {lappend t FORTRAN}
 		}
 		try {
@@ -449,20 +635,53 @@ namespace eval ::tclbuildtest {
 	# Test failure is triggered by throwing an exception
 	::tcltest::customMatch exception {return 1; #}
 
-	# Reset environment in preparation for a new test
-	proc reset-environment {} {
-		foreach v {constraints cppflags cflags cxxflags fflags ldflags libs} {variable $v; catch {unset $v}}
+	#
+	::np::proc test {{name {}} {description {}} {match {exception}} -- cts script} {
+		foreach v {constraints cppflags compile-flags cflags cxxflags fflags ldflags libs} {variable $v; catch {unset $v}}
+		set cts [constraints {*}$cts]
+		if {$name == {}} {set name [name]}
+		if {$description == {}} {set description "[description] build"}
+		::tcltest::test $name $description -constraints $cts -body $script -match $match
 	}
 
-	#
-	proc test {cts script} {
-		reset-environment
-		set cts [constraints {*}$cts]
-		::tcltest::test \
-			[name] \
-			"[description] build" \
-			-constraints $cts -body $script -match exception
+	# To be used in {all.tcl}
+	proc suite {args} {
+		::tcltest::configure -testdir [file dirname [file normalize [info script]]] {*}$args
+		::tcltest::runAllTests
 	}
+
+	# Quick & dirty hack to introduce extra verbosity option(s)
+	# Override the proc from in tcltest-*.tm
+	# Original code corresponds to version 2.5.1
+    proc ::tcltest::AcceptVerbose { level } {
+	set level [AcceptList $level]
+	set levelMap {
+		x exec
+	    l list
+	    p pass
+	    b body
+	    s skip
+	    t start
+	    e error
+	    l line
+	    m msec
+	    u usec
+	}
+	set levelRegexp "^([join [dict values $levelMap] |])\$"
+	if {[llength $level] == 1} {
+	    if {![regexp $levelRegexp $level]} {
+		# translate single characters abbreviations to expanded list
+		set level [string map $levelMap [split $level {}]]
+	    }
+	}
+	set valid [list]
+	foreach v $level {
+	    if {[regexp $levelRegexp $v]} {
+		lappend valid $v
+	    }
+	}
+	return $valid
+    }
 
 	proc read-file {file} {
 		set f [open $file r]

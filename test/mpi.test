@@ -1,12 +1,14 @@
-lappend auto_path [file join [file dirname [file normalize [info script]]] .. src]
+lappend auto_path [file join [file dirname [file normalize [info script]]] ..]
 
 package require tclbuildtest
 
 ::tclbuildtest::sandbox {
-    test {mpi c} {
-        run [compile mpi.c]
-    }
-    test {mpi fortran} {
-        run [compile mpi.f90]
+    foreach b {{} static} {
+        test [list mpi c $b] {
+            run [compile mpi.c]
+        }
+        test [list mpi fortran $b] {
+            run [compile mpi.f90]
+        }
     }
 }

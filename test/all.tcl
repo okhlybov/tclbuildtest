@@ -1,6 +1,4 @@
 # Template {all.tcl} file which is to be put into each test module's directory
-package require tcltest
-namespace import ::tcltest::*
-configure -testdir [file dirname [file normalize [info script]]] {*}$argv
-runAllTests
-cleanupTests
+lappend auto_path [file join [file dirname [file normalize [info script]]] ..]
+package require tclbuildtest
+::tclbuildtest::suite {*}$argv
