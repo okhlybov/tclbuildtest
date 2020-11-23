@@ -482,11 +482,11 @@ namespace eval ::tclbuildtest {
 
 	# Perform source code compilation into executable
 	proc compile {args} {
-		variable compile-count
 		set args [lsqueeze $args]
+		set exe [executable]
 		system {*}[concat \
 			[compiler $args] \
-			-o [set prog test[incr compile-count]] \
+			-o $exe \
 			[cppflags] \
 			[compile-flags] \
 			[[deduce-lang-compile-flags $args]] \
@@ -494,13 +494,13 @@ namespace eval ::tclbuildtest {
 			[ldflags] \
 			[libs] \
 		]
-		return $prog
+		return $exe
 	}
 
 	# Perform running of the specified executable with supplied command line arguments
 	proc run {args} {
 		if {[constraint? mpi]} {set runner [mpiexec]} else {set runner {}}
-		system {*}[collect $runner {*}$args]
+		system {*}[list $runner {*}$args]
 	}
 
 	proc system {args} {
@@ -570,6 +570,12 @@ namespace eval ::tclbuildtest {
 	# Construct the test name based on the constraints set
 	proc name {} {
 		join [list [file rootname [file tail [info script]]] {*}[constraints]] -
+	}
+
+	# Construct new unique executable name
+	proc executable {} {
+		variable compile-count
+		return [name]-[incr compile-count].exe
 	}
 
 	# Construct human-readable description of the test according to the contraints set
