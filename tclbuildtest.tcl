@@ -403,11 +403,7 @@ namespace eval ::tclbuildtest {
 		}
 	}
 
-	proc compiler {opts} {
-		return [[deduce-compiler-proc [lsqueeze $opts]]]
-	}
-
-	proc deduce-lang-compile-flags {opts} {
+	proc deduce-compile-flags-proc {opts} {
 		switch [deduce-language $opts] {
 			c {return cflags}
 			c++ {return cxxflags}
@@ -485,11 +481,11 @@ namespace eval ::tclbuildtest {
 		set args [lsqueeze $args]
 		set exe [executable]
 		system {*}[concat \
-			[compiler $args] \
+			[[deduce-compiler-proc $args]] \
 			-o $exe \
 			[cppflags] \
 			[compile-flags] \
-			[[deduce-lang-compile-flags $args]] \
+			[[deduce-compile-flags-proc $args]] \
 			$args \
 			[ldflags] \
 			[libs] \
