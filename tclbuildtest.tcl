@@ -429,7 +429,7 @@ namespace eval ::tclbuildtest {
 		try {set compile-flags} on error {} {
 			set compile-flags {}
 			if {[constraint? openmp]} {lappend compile-flags -fopenmp}
-			if {[constraint? thread]} {lappend compile-flags -pthreads}
+			if {[constraint? thread]} {lappend compile-flags -pthread}
 			if {![constraint? debug]} {lappend compile-flags -O2}
 		}
 		lappend compile-flags {*}$args
@@ -465,7 +465,7 @@ namespace eval ::tclbuildtest {
 			set ldflags [lsqueeze [env LDFLAGS]]
 			if {[constraint? static]} {lappend ldflags -static}
 			if {[constraint? openmp]} {lappend ldflags -fopenmp}
-			if {[constraint? thread]} {lappend ldflags -pthreads}
+			if {[constraint? thread]} {lappend ldflags -pthread}
 		}
 		lappend ldflags {*}$args
 	}
