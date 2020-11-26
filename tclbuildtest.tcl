@@ -200,7 +200,7 @@ namespace eval ::tclbuildtest {
 
 	# Standard predefined constraints
 	foreach ct {
-		c c++ fortran
+		c cxx fortran
 		single double
 		real complex
 		openmp thread hybrid mpi
@@ -380,7 +380,7 @@ namespace eval ::tclbuildtest {
 	proc deduce-language {opts} {
 		switch -regexp -nocase [lindex $opts [lsearch -glob -not $opts {-*}]] {
 			{\.c$} {return c}
-			{\.(cxx|cpp|cc)$} {return c++}
+			{\.(cxx|cpp|cc)$} {return cxx}
 			{\.(f|for|f\d+)$} {return fortran}
 			default {error {failed to deduce source language from the command line agruments}}
 		}
@@ -391,13 +391,13 @@ namespace eval ::tclbuildtest {
 		if {[constraint? mpi]} {
 			switch $lang {
 				c {return mpicc}
-				c++ {return mpicxx}
+				cxx {return mpicxx}
 				fortran {return mpifc}
 			}
 		} else {
 			switch $lang {
 				c {return cc}
-				c++ {return cxx}
+				cxx {return cxx}
 				fortran {return fc}
 			}
 		}
@@ -406,7 +406,7 @@ namespace eval ::tclbuildtest {
 	proc deduce-compile-flags-proc {opts} {
 		switch [deduce-language $opts] {
 			c {return cflags}
-			c++ {return cxxflags}
+			cxx {return cxxflags}
 			fortran {return fflags}
 		}
 	}
@@ -420,7 +420,7 @@ namespace eval ::tclbuildtest {
 		lappend cppflags {*}$args
 	}
 
-	proc compile-flags {args} {
+	proc common-compile-flags {args} {
 		variable compile-flags
 		try {set compile-flags} on error {} {
 			set compile-flags {}
@@ -470,13 +470,14 @@ namespace eval ::tclbuildtest {
 		variable libs
 		try {set libs} on error {} {
 			set libs [lsqueeze [env LIBS]]
-			if {[constraint? c++]} {lappend libs -lstdc++}
+			if {[constraint? cxx]} {lappend libs -lstdc++}
 			if {[constraint? fortran]} {lappend libs -lgfortran -lquadmath}
 		}
 		lappend libs {*}$args
 	}
 
 	# Perform source code compilation into executable
+	# Returns the executable name
 	proc compile {args} {
 		set args [lsqueeze $args]
 		set exe [executable]
@@ -484,7 +485,7 @@ namespace eval ::tclbuildtest {
 			[[deduce-compiler-proc $args]] \
 			-o $exe \
 			[cppflags] \
-			[compile-flags] \
+			[common-compile-flags] \
 			[[deduce-compile-flags-proc $args]] \
 			$args \
 			[ldflags] \
@@ -577,8 +578,7 @@ namespace eval ::tclbuildtest {
 	# Construct human-readable description of the test according to the contraints set
 	proc description {} {
 		set t {}
-		variable constraints
-		switch [intersection {c cxx fortran} $constraints] {
+		switch [intersection {c cxx fortran} [constraints]] {
 			c {lappend t C}
 			cxx {lappend t C++}
 			fortran {lappend t FORTRAN}
@@ -650,6 +650,7 @@ namespace eval ::tclbuildtest {
 	proc suite {args} {
 		::tcltest::configure -testdir [file dirname [file normalize [info script]]] {*}$args
 		::tcltest::runAllTests
+		::tcltest::cleanupTests
 	}
 
 	# Quick & dirty hack to introduce extra verbosity option(s)

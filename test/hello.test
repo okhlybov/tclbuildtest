@@ -4,8 +4,11 @@ package require tclbuildtest
 
 ::tclbuildtest::sandbox {
     foreach b {{} static} {
-        test [collect c $b] {
+        test [list c $b] {
             run [compile hello.c]
+        }
+        test [list cxx $b] {
+            run [compile hello.cpp]
         }
     }
 }

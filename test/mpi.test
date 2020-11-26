@@ -7,6 +7,9 @@ package require tclbuildtest
         test [list mpi c $b] {
             run [compile mpi.c]
         }
+        test [list mpi cxx $b] {
+            run [compile mpi.cpp]
+        }
         test [list mpi fortran $b] {
             run [compile mpi.f90]
         }
