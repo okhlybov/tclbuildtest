@@ -353,7 +353,11 @@ namespace eval ::tclbuildtest {
 		try {
 			file delete -force $dir
 		} on error {} {
-			exec -ignorestderr nohup sh -c "while \[ -d '$dir' \]; do rm -rf '$dir'; sleep 1; done" > /dev/null 2>@1 &
+			# This command fires up a background sanitizing process which does its best to delete
+			# staging directory in spite of executable locks or what's not which can happend on Windows
+			# This code should work in real UNIX environments or UNIX-like Windows environments
+			# such as Cygwin or MSYS(2).
+			exec -ignorestderr sh -c "nohup \${SHELL} -c \" while \[ -d '$dir' \]; do rm -rf '$dir' || sleep 3; done\" > /dev/null 2>&1 &"
 		}
 	}
 
@@ -372,7 +376,7 @@ namespace eval ::tclbuildtest {
 
 	proc packages {args} {
 		if {[constraint? static]} {set flags --static} else {set flags {}}
-		compile-flags {*}[lindex [dict get [system [pkg-config] {*}$args --cflags {*}$flags] stdout] 0]
+		common-compile-flags {*}[lindex [dict get [system [pkg-config] {*}$args --cflags {*}$flags] stdout] 0]
 		ldflags {*}[lindex [dict get [system [pkg-config] {*}$args --libs {*}$flags] stdout] 0]
 		return
 	}
