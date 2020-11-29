@@ -9,6 +9,8 @@ package provide tclbuildtest 0.1
 package require Tcl 8.6
 package require tcltest 2.5.1
 
+namespace eval ::tcltest {} # Make pkg_mkIndex happy
+
 # https://github.com/tcl2020/named-parameters
 
 namespace eval ::np {
