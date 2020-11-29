@@ -374,9 +374,10 @@ namespace eval ::tclbuildtest {
 		}
 	}
 
+	# Obtain compilation and linking flags for the specified packages via PkgConfig
 	proc packages {args} {
 		if {[constraint? static]} {set flags --static} else {set flags {}}
-		common-compile-flags {*}[lindex [dict get [system [pkg-config] {*}$args --cflags {*}$flags] stdout] 0]
+		xflags {*}[lindex [dict get [system [pkg-config] {*}$args --cflags {*}$flags] stdout] 0]
 		ldflags {*}[lindex [dict get [system [pkg-config] {*}$args --libs {*}$flags] stdout] 0]
 		return
 	}
@@ -424,15 +425,16 @@ namespace eval ::tclbuildtest {
 		lappend cppflags {*}$args
 	}
 
-	proc common-compile-flags {args} {
-		variable compile-flags
-		try {set compile-flags} on error {} {
-			set compile-flags {}
-			if {[constraint? openmp]} {lappend compile-flags -fopenmp}
-			if {[constraint? thread]} {lappend compile-flags -pthread}
-			if {![constraint? debug]} {lappend compile-flags -O2}
+	# Language-agnostic compile flags
+	proc xflags {args} {
+		variable xflags
+		try {set xflags} on error {} {
+			set xflags {}
+			if {[constraint? openmp]} {lappend xflags -fopenmp}
+			if {[constraint? thread]} {lappend xflags -pthread}
+			if {[constraint? debug]} {lappend xflags -Og} else {lappend xflags -O2}
 		}
-		lappend compile-flags {*}$args
+		lappend xflags {*}$args
 	}
 
 	proc cflags {args} {
@@ -489,7 +491,7 @@ namespace eval ::tclbuildtest {
 			[[deduce-compiler-proc $args]] \
 			-o $exe \
 			[cppflags] \
-			[common-compile-flags] \
+			[xflags] \
 			[[deduce-compile-flags-proc $args]] \
 			$args \
 			[ldflags] \
@@ -504,6 +506,7 @@ namespace eval ::tclbuildtest {
 		system {*}[list $runner {*}$args]
 	}
 
+	# Execute command line built from args
 	proc system {args} {
 		variable system-count
 		incr system-count
@@ -576,7 +579,8 @@ namespace eval ::tclbuildtest {
 	# Construct new unique executable name
 	proc executable {} {
 		variable compile-count
-		return [name]-[incr compile-count].exe
+		variable executable
+		return [set executable [name]-[incr compile-count].exe]
 	}
 
 	# Construct human-readable description of the test according to the contraints set
@@ -643,11 +647,14 @@ namespace eval ::tclbuildtest {
 
 	#
 	::np::proc test {{name {}} {description {}} {match {exception}} -- cts script} {
-		foreach v {constraints cppflags compile-flags cflags cxxflags fflags ldflags libs} {variable $v; catch {unset $v}}
+		foreach v {executable constraints cppflags xflags cflags cxxflags fflags ldflags libs} {variable $v; catch {unset $v}}
 		set cts [constraints {*}$cts]
 		if {$name == {}} {set name [name]}
 		if {$description == {}} {set description "[description] build"}
 		::tcltest::test $name $description -constraints $cts -body $script -match $match
+		# Attempt to delete the created executable if any to conserve space in stage dir
+		# It is OK for the operation to fail at this point as the executable may still be locked
+		variable executable; try {file delete -force $executable} on error {} {}
 	}
 
 	# To be used in {all.tcl}
