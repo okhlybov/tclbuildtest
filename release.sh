@@ -2,13 +2,15 @@
 
 set -e
 
-echo 'pkg_mkIndex .' | tclsh
-pkgver=`echo 'set auto_path .; puts [package require tclbuildtest]' | tclsh`
+echo 'pkg_mkIndex .' | ${TCLSH:-tclsh}
+ver=$(echo 'source [file join . tclbuildtest.tcl]; puts [package require tclbuildtest]' | ${TCLSH:-tclsh})
+pkg=tclbuildtest-$ver
+prefix=stage/$pkg
 
-rm -rf build
-mkdir -p build/tclbuildtest/test
-cp -r test build/tclbuildtest
-cp README.md pkgIndex.tcl tclbuildtest.tcl all.tcl build/tclbuildtest
-tar czf tclbuildtest-${pkgver}.tar.gz -C build tclbuildtest
+rm -rf stage
+mkdir -p $prefix/test
+cp -r test $prefix
+cp README.md LICENSE pkgIndex.tcl tclbuildtest.tcl all.tcl install.sh tclbuildtest $prefix
+tar czf $pkg.tar.gz -C stage $pkg
 
 #

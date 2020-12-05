@@ -9,7 +9,7 @@ package provide tclbuildtest 0.1
 package require Tcl 8.6
 package require tcltest 2.5.1
 
-namespace eval ::tcltest {} # Make pkg_mkIndex happy
+namespace eval ::tcltest {}; # Make pkg_mkIndex happy
 
 # https://github.com/tcl2020/named-parameters
 
@@ -613,6 +613,7 @@ namespace eval ::tclbuildtest {
 			o {lappend t optimized}
 			g {lappend t debugging}
 		}
+		if {[constraint? static]} {lappend t static}
 		join $t
 	}
 
@@ -647,15 +648,15 @@ namespace eval ::tclbuildtest {
 	# Test failure is triggered by throwing an exception
 	::tcltest::customMatch exception {return 1; #}
 
-	#
+	# Main test command
 	::np::proc test {{name {}} {description {}} {match {exception}} -- cts script} {
 		foreach v {executable constraints cppflags xflags cflags cxxflags fflags ldflags libs} {variable $v; catch {unset $v}}
 		set cts [constraints {*}$cts]
 		if {$name == {}} {set name [name]}
 		if {$description == {}} {set description "[description] build"}
 		::tcltest::test $name $description -constraints $cts -body $script -match $match
-		# Attempt to delete the created executable if any to conserve space in stage dir
-		# It is OK for the operation to fail at this point as the executable may still be locked
+		# Attempt to delete the created executable if any to conserve space in the stage dir
+		# It's OK for the operation to fail at this point as the executable may still be locked
 		variable executable; try {file delete -force $executable} on error {} {}
 	}
 
