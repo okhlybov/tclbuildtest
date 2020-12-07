@@ -1,0 +1,15 @@
+#!/bin/bash
+
+[ -z "$ALL" ] && ALL='/usr/share/test/all.tcl'
+
+export TEMP=$(mktemp -d)
+export TMP="$TEMP"
+
+nohup $SHELL -c "
+    tail --pid=$$ -f /dev/null
+    while [ -d '$TEMP' ]; do rm -rf '$TEMP' || sleep 3; done
+" > /dev/null 2>&1 &
+
+${TCLSH:-tclsh} "$ALL" "$@"
+
+#

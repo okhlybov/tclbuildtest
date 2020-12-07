@@ -62,7 +62,7 @@ package require tclbuildtest
 
 where the Tcl interpreter is instructed to load the TclBuildTest source directly from a file placed alongside the `all.tcl` currently executed thus effectively bypassing the default Tcl package loading mechanism.
 
-As long as TclBuildTest code is not (yet) stabilized, this variant might be preferable as the package-specific test code can be (or might eventually become) incompatible with the installed system-wide TclBuildTest.
+As long as TclBuildTest code is not (yet) stabilized, this variant might be preferable as the package-specific test code can be (or might eventually become) incompatible with the installed system-wide TclBuildTest package.
 
 
 
@@ -114,7 +114,7 @@ tclbuildtest -verbose tx
 ```
 
 ```shell
-tclbuildtest -verbose 'start exec`
+tclbuildtest -verbose 'start exec'
 ```
 
 When no `-verbose` flag is specified a default value of `body error` is in effect which outputs detailed description of test failures.

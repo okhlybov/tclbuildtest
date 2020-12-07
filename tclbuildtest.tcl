@@ -4,7 +4,7 @@
 # https://github.com/okhlybov/tclbuildtest
 #
 
-package provide tclbuildtest 0.1
+package provide tclbuildtest 0.1.0
 
 package require Tcl 8.6
 package require tcltest 2.5.1
