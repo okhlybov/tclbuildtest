@@ -1,5 +1,5 @@
 #
-# Tcltest extenstion to test source code compilation & running
+# TclTest extenstion to test source code compilation & running
 #
 # https://github.com/okhlybov/tclbuildtest
 #
@@ -198,7 +198,7 @@ namespace eval ::np {
 namespace eval ::tclbuildtest {
 	
 	variable system-count 0
-	variable compile-count 0
+	variable build-count 0
 
 	# Standard predefined constraints
 	foreach ct {
@@ -363,6 +363,9 @@ namespace eval ::tclbuildtest {
 		}
 	}
 
+	# Execute script from a temporary location
+	# Script file is copied to the location along with all residing files
+	# The location gets deleted afterwards
 	proc sandbox {script} {
 		variable stagedir [mktempdir]
 		try {
@@ -377,13 +380,14 @@ namespace eval ::tclbuildtest {
 	}
 
 	# Obtain compilation and linking flags for the specified packages via PkgConfig
-	proc packages {args} {
+	proc require {args} {
 		if {[constraint? static]} {set flags --static} else {set flags {}}
 		xflags {*}[lindex [dict get [system [pkg-config] {*}$args --cflags {*}$flags] stdout] 0]
 		ldflags {*}[lindex [dict get [system [pkg-config] {*}$args --libs {*}$flags] stdout] 0]
 		return
 	}
 
+	# Deduce source code language from command line arguments
 	proc deduce-language {opts} {
 		switch -regexp -nocase [lindex $opts [lsearch -glob -not $opts {-*}]] {
 			{\.c$} {return c}
@@ -393,6 +397,7 @@ namespace eval ::tclbuildtest {
 		}
 	}
 
+	# Deduce compilation command from command line arguments
 	proc deduce-compiler-proc {opts} {
 		set lang [deduce-language $opts]
 		if {[constraint? mpi]} {
@@ -410,6 +415,7 @@ namespace eval ::tclbuildtest {
 		}
 	}
 
+	# Deduce compilation flags command from command line arguments
 	proc deduce-compile-flags-proc {opts} {
 		switch [deduce-language $opts] {
 			c {return cflags}
@@ -418,6 +424,7 @@ namespace eval ::tclbuildtest {
 		}
 	}
 	
+	# C preprocessor command line arguments
 	proc cppflags {args} {
 		variable cppflags
 		try {set cppflags} on error {} {
@@ -427,7 +434,7 @@ namespace eval ::tclbuildtest {
 		lappend cppflags {*}$args
 	}
 
-	# Language-agnostic compile flags
+	# Language-agnostic compilation command line arguments
 	proc xflags {args} {
 		variable xflags
 		try {set xflags} on error {} {
@@ -439,6 +446,7 @@ namespace eval ::tclbuildtest {
 		lappend xflags {*}$args
 	}
 
+	# C-specific compilation command line arguments
 	proc cflags {args} {
 		variable cflags
 		try {set cflags} on error {} {
@@ -447,6 +455,8 @@ namespace eval ::tclbuildtest {
 		lappend cflags {*}$args
 	}
 
+	
+	# C++-specific compilation command line arguments
 	proc cxxflags {args} {
 		variable cxxflags
 		try {set cxxflags} on error {} {
@@ -455,6 +465,7 @@ namespace eval ::tclbuildtest {
 		lappend cxxflags {*}$args
 	}
 
+	# FORTRAN-specific compilation command line arguments
 	proc fflags {args} {
 		variable fflags
 		try {set fflags} on error {} {
@@ -463,6 +474,7 @@ namespace eval ::tclbuildtest {
 		lappend fflags {*}$args
 	}
 
+	# Linker command line arguments
 	proc ldflags {args} {
 		variable ldflags
 		try {set ldflags} on error {} {
@@ -474,6 +486,7 @@ namespace eval ::tclbuildtest {
 		lappend ldflags {*}$args
 	}
 
+	# Linked libraries command line arguments
 	proc libs {args} {
 		variable libs
 		try {set libs} on error {} {
@@ -486,7 +499,7 @@ namespace eval ::tclbuildtest {
 
 	# Perform source code compilation into executable
 	# Returns the executable name
-	proc compile {args} {
+	proc build {args} {
 		set args [lsqueeze $args]
 		set exe [executable]
 		system {*}[concat \
@@ -508,7 +521,7 @@ namespace eval ::tclbuildtest {
 		system {*}[list $runner {*}$args]
 	}
 
-	# Execute command line built from args
+	# Execute command line built from command line arguments
 	proc system {args} {
 		variable system-count
 		incr system-count
@@ -580,9 +593,9 @@ namespace eval ::tclbuildtest {
 
 	# Construct new unique executable name
 	proc executable {} {
-		variable compile-count
+		variable build-count
 		variable executable
-		return [set executable [name]-[incr compile-count].exe]
+		return [set executable [name]-[incr build-count].exe]
 	}
 
 	# Construct human-readable description of the test according to the contraints set
@@ -626,6 +639,7 @@ namespace eval ::tclbuildtest {
 		lappend constraints {*}[lsqueeze $args]
 	}
 
+	# Return true if any of specified contraints is set
 	proc constraint-any? {args} {
 		foreach ct $args {
 			if {[constraint? $ct]} {return 1}
@@ -633,6 +647,7 @@ namespace eval ::tclbuildtest {
 		return 0
 	}
 
+	# Return true if all scpecified constraints are set
 	proc constraint-all? {args} {
 		foreach ct $args {
 			if {![constraint? $ct]} {return 0}
@@ -640,6 +655,7 @@ namespace eval ::tclbuildtest {
 		return 1
 	}
 
+	# Return true if specified constraint is set
 	proc constraint? {ct} {
 		variable constraints
 		expr {[lsearch $constraints $ct] >= 0}
@@ -700,6 +716,7 @@ namespace eval ::tclbuildtest {
 	return $valid
     }
 
+	# Read text file and return list of lines
 	proc read-file {file} {
 		set f [open $file r]
 		try {

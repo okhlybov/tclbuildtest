@@ -4,7 +4,7 @@
 # TclBuildTest installation script
 #
 # Honours TCLSH DESTDIR PREFIX ALL environment variables
-# ALL contains full path to the root all.tcl file
+# ALL contains full path to the root all.tcl file to be hardcoded in the launcher scipt
 #
 
 set -e
@@ -31,6 +31,10 @@ install -m444 all.tcl -t "$dir"
 
 dir="$DESTDIR/$PREFIX/lib/tclbuildtest$ver"
 mkdir -p "$dir"
-install -m444 tclbuildtest.tcl pkgIndex.tcl -t "$dir"
+install -m444 tclbuildtest.tcl -t "$dir"
+(
+    cd "$dir"
+    echo 'pkg_mkIndex .' | ${TCLSH:-tclsh}
+)
 
 #

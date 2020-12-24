@@ -5,10 +5,10 @@ package require tclbuildtest
 ::tclbuildtest::sandbox {
     foreach b {{} static} {
         test [list c $b] {
-            run [compile hello.c]
+            run [build hello.c]
         }
         test [list cxx $b] {
-            run [compile hello.cpp]
+            run [build hello.cpp]
         }
     }
 }

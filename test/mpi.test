@@ -5,13 +5,13 @@ package require tclbuildtest
 ::tclbuildtest::sandbox {
     foreach b {{} static} {
         test [list mpi c $b] {
-            run [compile mpi.c]
+            run [build mpi.c]
         }
         test [list mpi cxx $b] {
-            run [compile mpi.cpp]
+            run [build mpi.cpp]
         }
         test [list mpi fortran $b] {
-            run [compile mpi.f90]
+            run [build [require msmpi] mpi.f90]
         }
     }
 }
