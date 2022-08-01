@@ -345,7 +345,19 @@ namespace eval ::tclbuildtest {
 
 	# Create temporary directory
 	proc mktempdir {} {
-		set t [file join $::env(TEMP) [file rootname [file tail [info script]]][expr {int(rand()*9999)}]]
+		foreach t {TMPDIR TEMP TMP} {
+			if {![catch {set t [set ::env($t)]}]} {
+				if {[file isdirectory $t]} {return [_mktempdir $t]}
+			}
+		}
+		foreach t {/tmp} {
+			if {[file isdirectory $t]} {return [_mktempdir $t]}
+		}
+		error "failed to create temporary directory"
+	}
+	
+	proc _mktempdir {dir} {
+		set t [file join $dir [file rootname [file tail [info script]]][expr {int(rand()*9999)}]]
 		file mkdir $t
 		return $t
 	}
